@@ -1,0 +1,3 @@
+[submodule "tools/dev_workflow"]
+	path = tools/dev_workflow
+	url = https://github.com/VonC/senv_dev_workflow
