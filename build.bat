@@ -62,6 +62,18 @@ if not "%build_status%"=="0" (
   set "build_status=0"
 )
 
+REM --- Step 4: Package VSIX ---
+%_info% "Packaging VSIX..."
+pushd "%PRJ_DIR%"
+call vsce package --out "%PRJ_DIR_NAME%-%project_version%.vsix"
+set "build_status=%ERRORLEVEL%"
+popd
+
+if not "%build_status%"=="0" (
+  %_fatal% "VSIX packaging failed." 12
+  goto :post
+)
+
 %_ok% "Build of '%PRJ_DIR_NAME%' completed successfully."
 
 :post
