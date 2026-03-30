@@ -46,12 +46,14 @@ With this fix, `fetchCopilotInternal` succeeds and returns the real `quota_reset
 
 The internal API exposes two "remaining" fields per quota snapshot:
 
-- **`quota_remaining`**: always ≥ 0; once you hit the monthly limit, it stays at 0 even if you keep sending requests.
-- **`remaining`**: the real-time value; it goes **below zero** when you exceed the monthly limit (e.g., `−50` means 50 requests past the cap).
+- **`quota_remaining`**: clamped at 0 — once you hit the monthly limit it stays at 0, even if you keep sending requests.
+- **`remaining`**: the live counter — it goes **below zero** when you exceed the monthly limit (e.g., `−50` means 50 requests past the cap).
 
-`usedRequests` is computed as `entitlement − remaining`.  
-If you are 50 requests into overage, `remaining = −50` → `usedRequests = 1550`, which correctly exceeds `monthlyLimit = 1500`.  
-With `quota_remaining` (clamped at 0), you would get `usedRequests = 1500` regardless; the extension would never know you are over budget.
+**Legacy code:** `const remaining = premium.quota_remaining`  
+Because `quota_remaining` is clamped, `usedRequests = entitlement − quota_remaining` can never exceed `entitlement`. At 50 requests into overage you still get `usedRequests = 1500` — the extension never knew you were over budget.
+
+**New code:** `const remaining = premium.remaining`  
+Now `usedRequests = entitlement − remaining`. At 50 requests into overage, `remaining = −50` → `usedRequests = 1550`, which correctly exceeds `monthlyLimit = 1500`. The overage cost and the red indicator trigger as intended.
 
 ---
 
