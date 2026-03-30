@@ -28,6 +28,7 @@
 			"titleBar.inactiveBackground": "#ee5d6199",
 			"titleBar.inactiveForeground": "#15202b99"
 		},
-		"peacock.color": "#ee5d61"
+		"peacock.color": "#ee5d61",
+		"powershell.cwd": "copilot-pacer"
 	}
 }
