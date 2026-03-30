@@ -21,11 +21,13 @@ Four files modified in total across two phases.
 **File:** `src/api.ts`, `fetchCopilotInternal`
 
 **Before:**
+
 ```typescript
 const premium = data.quota_snapshots?.premium_interactions;
 ```
 
 **After:**
+
 ```typescript
 const quotaArr = data.quota_snapshots
   ? Object.values(data.quota_snapshots) as any[]
@@ -44,11 +46,13 @@ const premium = quotaArr.find(
 **File:** `src/api.ts`, `fetchCopilotInternal`
 
 **Before:**
+
 ```typescript
 const remaining = premium.quota_remaining as number;
 ```
 
 **After:**
+
 ```typescript
 const remaining = premium.remaining as number;
 ```
@@ -64,6 +68,7 @@ const remaining = premium.remaining as number;
 **File:** `src/types.ts`
 
 Add two fields to the `PacingResult` interface:
+
 ```typescript
 todayUsedRequests: number;   // requests used since first fetch of current UTC day
 dailyBudget: number;         // adaptive daily quota: remainingRequests / remainingDays
@@ -109,17 +114,18 @@ const futureRatio = futureQuota > 0
 **File:** `src/statusBar.ts`
 
 1. Change `globalState` variable type to include `setKeysForSync`:
+
 ```typescript
 let globalState: vscode.Memento & { setKeysForSync(keys: readonly string[]): void };
 ```
 
-2. In `initStatusBar`, store `globalState = context.globalState` and register **both** keys for VS Code Settings Sync:
+1. In `initStatusBar`, store `globalState = context.globalState` and register **both** keys for VS Code Settings Sync:
 
 ```typescript
 globalState.setKeysForSync(["copilot-pacer.dailyBaseline", "copilot-pacer.adaptiveQuota"]);
 ```
 
-3. Add helper `getTodayUsed`. The stored entry has shape `{ date, baseline, lastSeen }`. On day rollover the previous day's `lastSeen` becomes the new `baseline`, so requests made after VS Code last closed are attributed to yesterday — and the new day starts from an accurate baseline.
+1. Add helper `getTodayUsed`. The stored entry has shape `{ date, baseline, lastSeen }`. On day rollover the previous day's `lastSeen` becomes the new `baseline`, so requests made after VS Code last closed are attributed to yesterday — and the new day starts from an accurate baseline.
 
 ```typescript
 function getTodayUsed(currentUsed: number): number {
@@ -139,7 +145,8 @@ function getTodayUsed(currentUsed: number): number {
 }
 ```
 
-4. Add helper `daysUntilPeriodEnd`:
+1. Add helper `daysUntilPeriodEnd`:
+
 ```typescript
 function daysUntilPeriodEnd(periodEnd: Date): number {
   const now = new Date();
@@ -149,7 +156,7 @@ function daysUntilPeriodEnd(periodEnd: Date): number {
 }
 ```
 
-5. Add helper `getAdaptiveDailyBudget`. Computed once per UTC day from the day's opening `baseline` and `periodEnd`. Cached in `copilot-pacer.adaptiveQuota` as `{ date, quota }`.
+1. Add helper `getAdaptiveDailyBudget`. Computed once per UTC day from the day's opening `baseline` and `periodEnd`. Cached in `copilot-pacer.adaptiveQuota` as `{ date, quota }`.
 
 ```typescript
 function getAdaptiveDailyBudget(usage: CopilotUsage): number {
@@ -175,14 +182,15 @@ function getAdaptiveDailyBudget(usage: CopilotUsage): number {
 }
 ```
 
-6. In `updatePacing`, after fetching `usage`, call both helpers and pass results to `calculatePacing`:
+1. In `updatePacing`, after fetching `usage`, call both helpers and pass results to `calculatePacing`:
+
 ```typescript
 const todayUsed = getTodayUsed(usage.usedRequests);
 const adaptiveDailyBudget = getAdaptiveDailyBudget(usage);
 const result = calculatePacing(usage, todayUsed, adaptiveDailyBudget);
 ```
 
-7. Update tooltips to include `Today: X / Y` line and correct color logic:
+1. Update tooltips to include `Today: X / Y` line and correct color logic:
    - Red (`errorForeground`): monthly overage (`overageCost > 0`)
    - Orange (`warningForeground`): over daily budget (`buffer < 0`)
    - Normal: within daily budget
@@ -194,7 +202,8 @@ const result = calculatePacing(usage, todayUsed, adaptiveDailyBudget);
 **File:** `src/extension.ts`
 
 Export `outputChannel: vscode.OutputChannel` so `statusBar.ts` can log diagnostic lines:
-```
+
+```txt
 [internal API] used=1106 / 1500 | period 2026-03-01 → 2026-04-01
 [today] used=12 / 48
 ```

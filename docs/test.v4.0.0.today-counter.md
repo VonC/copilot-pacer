@@ -92,6 +92,7 @@ This is the easiest way. It launches a **separate VS Code window** with your loc
 When you press **F5** the extension is **not installed** — VS Code loads it directly from the `out/` folder of the project you opened. There is no separate "installed" copy. The version is always whatever is in [package.json](../package.json).
 
 To confirm:
+
 - Check `package.json` in the project root: `"version": "4.0.0"`.
 - The Extensions sidebar (**Ctrl+Shift+X**) in the EDH window lists the extension with that same version, but this reflects `package.json`, not an installation record.
 

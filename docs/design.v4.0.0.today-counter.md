@@ -78,6 +78,7 @@ Using `remaining` means `usedRequests = entitlement - remaining` correctly excee
 ### Problem
 
 The old pacing model divided the month into three cumulative zones:
+
 - **Zone 1** (`usedRequests < startOfTodayQuota`): lens = 0 (ahead of pace)
 - **Zone 2** (`startOfTodayQuota ≤ usedRequests ≤ endOfTodayQuota`): lens fills proportionally
 - **Zone 3** (`usedRequests > endOfTodayQuota`): lens full, future zone fills
@@ -88,13 +89,13 @@ A user who is even slightly ahead of the monthly pace is permanently in Zone 1 �
 
 The lens shows **how much of today's adaptive allowance has been consumed since UTC midnight** (`todayUsed`), expressed as a fraction of the adaptive daily budget.
 
-```
+```txt
 lensRatio = todayUsed / adaptiveDailyBudget   (clamped to [0, 1])
 ```
 
 `adaptiveDailyBudget` is computed **once per UTC day** and stored in `globalState`:
 
-```
+```txt
 adaptiveDailyBudget = max(1, remainingRequests / remainingDays)
 
 where:
@@ -103,6 +104,7 @@ where:
 ```
 
 This automatically accounts for borrowed or saved requests from previous days:
+
 - If requests were over-consumed yesterday, `remainingRequests` is smaller → smaller budget today.
 - If requests were conserved, `remainingRequests` is larger → larger budget today.
 
@@ -121,7 +123,7 @@ The past zone still uses the static budget as its reference line (`accumulatedBe
 
 Since the GitHub API only exposes cumulative monthly usage, today's consumption is derived by a stored baseline:
 
-```
+```txt
 todayUsed = currentUsedRequests − baseline
 ```
 
@@ -173,7 +175,7 @@ The quota is **not** recalculated intra-day when more requests are consumed: the
 
 `activate()` calls `updatePacing()` immediately (no defer). Assuming `currentUsed = 1108`, `monthlyLimit = 1500`, `periodEnd = 2026-04-01`, today = `2026-03-29` (3 days remaining):
 
-```
+```txt
 1. getTodayUsed(1108)
    stored (dailyBaseline) = undefined
    → baseline = 1108  (no lastSeen, use currentUsed)
@@ -221,13 +223,15 @@ The formula remains correct across machines because the GitHub API's `currentUse
 ### Tooltip changes
 
 Before:
-```
+
+```txt
 Requests: 1106 / 1500
 ✅ On track. Remaining today: ~297 requests.
 ```
 
 After:
-```
+
+```txt
 Requests: 1106 / 1500
 Today: 12 / 48
 ✅ Remaining today: ~36 requests.
