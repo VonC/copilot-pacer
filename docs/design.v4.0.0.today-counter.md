@@ -130,7 +130,7 @@ todayUsed = currentUsedRequests − baseline
 The baseline is stored in `context.globalState` under the key `copilot-pacer.dailyBaseline` as:
 
 ```json
-{ "date": "YYYY-MM-DD", "baseline": 1106, "lastSeen": 1130 }
+{ "date": "YYYY-MM-DD", "baseline": 1106, "lastSeen": 1130, "periodStartKey": "YYYY-MM-DD" }
 ```
 
 | Field | Meaning | Updated when |
@@ -138,25 +138,30 @@ The baseline is stored in `context.globalState` under the key `copilot-pacer.dai
 | `date` | Current UTC date (`YYYY-MM-DD`) | On day rollover |
 | `baseline` | Cumulative count at the start of the UTC day | On day rollover — set from the previous day's `lastSeen` |
 | `lastSeen` | Most recent cumulative count observed this session | On every refresh |
+| `periodStartKey` | Current billing-period start date (`YYYY-MM-DD`) | On every refresh; used to detect monthly counter resets |
 
-On day rollover (`stored.date ≠ todayKey`), `baseline` is set to the previous day's `lastSeen`. This ensures that requests made **after VS Code was last closed** the previous day are still attributed to that day, and the new day starts from an accurate baseline.
+On a normal day rollover (`stored.date ≠ todayKey`), `baseline` is set to the previous day's `lastSeen`. This ensures that requests made **after VS Code was last closed** the previous day are still attributed to that day, and the new day starts from an accurate baseline.
 
-**First-ever run:** no `lastSeen` exists yet, so `baseline = currentUsed` and `todayUsed = 0` for that initial session. The data accumulates from the next UTC midnight onward.
+On the first day of a new billing period (`periodStartKey === todayKey`), the monthly counter has reset, so `baseline` is forced to `0`.
+
+**First-ever run:** on a non-period-start day, no `lastSeen` exists yet, so `baseline = currentUsed` and `todayUsed = 0` for that initial session. On the first day of a new billing period, `baseline = 0` so early-month usage is counted immediately.
 
 > **Limitation:** Requests sent today *before* the extension was first activated are not reflected in `todayUsed` for that day. The counter self-corrects at the next UTC midnight rollover.
 
 ### Adaptive quota snapshot
 
-The adaptive daily budget depends on `baseline` (set at day rollover) and `periodEnd` (from the API). It is computed **once per UTC day** — the first time `getAdaptiveDailyBudget()` is called after midnight — and stored under the key `copilot-pacer.adaptiveQuota` as:
+The adaptive daily budget depends on `baseline` (set at day rollover) and `periodEnd` (from the API). It is stored under the key `copilot-pacer.adaptiveQuota` as:
 
 ```json
-{ "date": "YYYY-MM-DD", "quota": 72 }
+{ "date": "YYYY-MM-DD", "quota": 72, "periodStartKey": "YYYY-MM-DD", "baseline": 1106 }
 ```
 
 | Field | Meaning | Updated when |
 | ---- | ---- | ---- |
 | `date` | UTC date this quota applies to | On day rollover |
-| `quota` | Adaptive daily budget (`remainingRequests / remainingDays`) | On day rollover — computed from that day's opening `baseline` |
+| `quota` | Adaptive daily budget (`remainingRequests / remainingDays`) | When the cache matches the current day state |
+| `periodStartKey` | Billing-period start date for which this quota was computed | Used to reject stale same-day cache entries after a monthly reset |
+| `baseline` | Opening baseline used to compute this quota | Used to reject stale same-day cache entries after the baseline changes |
 
 The quota is computed with `daysUntilPeriodEnd(periodEnd)`, which counts calendar UTC days from today (inclusive) to `periodEnd` (exclusive), clamped to a minimum of 1:
 
@@ -169,26 +174,26 @@ function daysUntilPeriodEnd(periodEnd: Date): number {
 }
 ```
 
-The quota is **not** recalculated intra-day when more requests are consumed: the denominator stays fixed for the full UTC day so the lens doesn't shrink as you use it. It is recalculated at the next UTC midnight rollover.
+The quota is **not** recalculated on every refresh. It is reused only when the UTC date, billing-period start, and opening baseline all still match. If any of those differ, the cache is dropped and the quota is recomputed immediately. This fixes the April 1 case where a stale same-day quota from the old month could survive into the new billing period.
 
 **First-ever run — full initialization trace:**
 
 `activate()` calls `updatePacing()` immediately (no defer). Assuming `currentUsed = 1108`, `monthlyLimit = 1500`, `periodEnd = 2026-04-01`, today = `2026-03-29` (3 days remaining):
 
 ```txt
-1. getTodayUsed(1108)
+1. getTodayUsed(usage)
    stored (dailyBaseline) = undefined
    → baseline = 1108  (no lastSeen, use currentUsed)
-   → writes { date: "2026-03-29", baseline: 1108, lastSeen: 1108 }
+  → writes { date: "2026-03-29", baseline: 1108, lastSeen: 1108, periodStartKey: "2026-03-01" }
    → returns max(0, 1108 − 1108) = 0
 
 2. getAdaptiveDailyBudget(usage)
    storedQuota (adaptiveQuota) = undefined  → recompute
-   storedBaseline = { date: "2026-03-29", baseline: 1108, lastSeen: 1108 }  ← just written above
+  storedBaseline = { date: "2026-03-29", baseline: 1108, lastSeen: 1108, periodStartKey: "2026-03-01" }  ← just written above
    remainingRequests = max(0, 1500 − 1108) = 392
    remainingDays     = 3
    quota             = max(1, 392 / 3) ≈ 131
-   → writes { date: "2026-03-29", quota: 131 }
+  → writes { date: "2026-03-29", quota: 131, periodStartKey: "2026-03-01", baseline: 1108 }
    → returns 131
 
 Result: lens shows 0 / 131  (empty — no requests sent yet this session)

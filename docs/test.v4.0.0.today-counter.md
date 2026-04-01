@@ -93,7 +93,7 @@ When you press **F5** the extension is **not installed** — VS Code loads it di
 
 To confirm:
 
-- Check `package.json` in the project root: `"version": "4.0.0"`.
+- Check `package.json` in the project root: `"version": "4.0.1"`.
 - The Extensions sidebar (**Ctrl+Shift+X**) in the EDH window lists the extension with that same version, but this reflects `package.json`, not an installation record.
 
 ### Settings initialization in the Extension Development Host
@@ -119,12 +119,12 @@ cd C:\Users\xxx\prog\git\copilot-trackers\copilot-pacer
 vsce package
 ```
 
-This produces a file like `copilot-pacer-4.0.0.vsix` in the current directory.
+This produces a file like `copilot-pacer-4.0.1.vsix` in the current directory.
 
 ### 5c — Install the VSIX
 
 ```powershell
-code --install-extension copilot-pacer-4.0.0.vsix
+code --install-extension copilot-pacer-4.0.1.vsix
 ```
 
 Or from within VS Code: **Extensions** sidebar → **⋯** menu (top-right) → **Install from VSIX…** → select the `.vsix` file.
@@ -178,7 +178,7 @@ If you prefer a fully installed extension on that machine:
 ```powershell
 npm install -g @vscode/vsce
 vsce package
-code --install-extension copilot-pacer-4.0.0.vsix
+code --install-extension copilot-pacer-4.0.1.vsix
 ```
 
 ### Approach B — Copy the VSIX from your current machine
@@ -187,10 +187,10 @@ If the other machine cannot run `npm` (e.g. a restricted environment), copy the 
 
 #### 6e — Transfer the VSIX
 
-Copy `copilot-pacer-4.0.0.vsix` by any means (USB drive, shared folder, `scp`, etc.) and install:
+Copy `copilot-pacer-4.0.1.vsix` by any means (USB drive, shared folder, `scp`, etc.) and install:
 
 ```powershell
-code --install-extension copilot-pacer-4.0.0.vsix
+code --install-extension copilot-pacer-4.0.1.vsix
 ```
 
 Or from within VS Code: **Extensions** sidebar → **⋯** menu → **Install from VSIX…**.
@@ -222,6 +222,7 @@ code --install-extension sergiig.copilot-pacer
 | ---- | ---- |
 | **Internal API succeeds** | Open the Output panel (`Ctrl+Shift+U`) → select **Pacer for GitHub Copilot** from the dropdown. There should be no fallback-to-billing error. |
 | **Adaptive quota logged** | The Output panel should show a line like `[adaptive quota] remaining=394 / 3 days → 131/day` on the first refresh of each UTC day. |
+| **First day of a new billing period** | On a fresh month reset, `Today: X / Y` should use `baseline = 0` and a recomputed `Y`, not a stale same-day value from the old period. |
 | **Today bracket fills** | The status bar should show `┃▮…┃` with partial fill (not all-empty `┃▯▯▯▯▯┃`). |
 | **Month bracket still works** | The past zone `▰▱` should show the same proportional fill as before. |
 | **Token counter still works** | Send a Copilot chat message and confirm the token counter increments. |

@@ -187,4 +187,15 @@ Both approaches require `todayUsed`, which needs a local **baseline snapshot** �
 
 **Gaps #1 and #2 together were the originally reported root cause.** Fixing them surfaces Gap #4: even with correct API data, the lens stays empty for any user whose cumulative usage falls below `startOfTodayQuota` — which includes most conservative users. The real fix requires (a) a UTC-day baseline in `context.globalState` to track `todayUsed`, and (b) choosing the right daily denominator (static budget vs adaptive quota — see above).
 
+---
+
+## Follow-up after the first rollout
+
+Testing on April 1 exposed two more local-state bugs in `statusBar.ts`:
+
+1. On the first day of a new billing period, the stored baseline must reset to `0` instead of carrying the previous month's `lastSeen` value forward.
+2. The cached adaptive quota cannot key off the UTC date alone. It also has to match the current `periodStartKey` and opening `baseline`, otherwise a stale same-day value can survive the month reset.
+
+These are follow-up state-management fixes. They do not change the API analysis above, but they do change how the local baseline and daily quota cache are validated on period-start days.
+
 See [design.v4.0.0.today-counter.md](design.v4.0.0.today-counter.md) for the proposed solution design.

@@ -125,23 +125,17 @@ let globalState: vscode.Memento & { setKeysForSync(keys: readonly string[]): voi
 globalState.setKeysForSync(["copilot-pacer.dailyBaseline", "copilot-pacer.adaptiveQuota"]);
 ```
 
-1. Add helper `getTodayUsed`. The stored entry has shape `{ date, baseline, lastSeen }`. On day rollover the previous day's `lastSeen` becomes the new `baseline`, so requests made after VS Code last closed are attributed to yesterday — and the new day starts from an accurate baseline.
+1. Add helper `getTodayUsed`. The stored entry has shape `{ date, baseline, lastSeen, periodStartKey }`. On a normal day rollover the previous day's `lastSeen` becomes the new `baseline`, so requests made after VS Code last closed are attributed to yesterday. On the first day of a new billing period, force `baseline = 0` so the new monthly counter starts cleanly.
 
 ```typescript
-function getTodayUsed(currentUsed: number): number {
-  const todayKey = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD' UTC
-  const stored = globalState.get<{ date: string; baseline: number; lastSeen: number }>(
-    "copilot-pacer.dailyBaseline"
-  );
-  if (!stored || stored.date !== todayKey) {
-    const baseline = stored ? stored.lastSeen : currentUsed;
-    globalState.update("copilot-pacer.dailyBaseline", {
-      date: todayKey, baseline, lastSeen: currentUsed,
-    });
-    return Math.max(0, currentUsed - baseline);
-  }
-  globalState.update("copilot-pacer.dailyBaseline", { ...stored, lastSeen: currentUsed });
-  return Math.max(0, currentUsed - stored.baseline);
+function getTodayUsed(usage: CopilotUsage): number {
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const periodStartKey = usage.periodStart.toISOString().slice(0, 10);
+  const stored = globalState.get<DailyBaselineState>("copilot-pacer.dailyBaseline");
+  const resolved = resolveDailyBaseline(stored, usage.usedRequests, todayKey, periodStartKey);
+
+  globalState.update("copilot-pacer.dailyBaseline", resolved.state);
+  return resolved.todayUsed;
 }
 ```
 
@@ -156,36 +150,35 @@ function daysUntilPeriodEnd(periodEnd: Date): number {
 }
 ```
 
-1. Add helper `getAdaptiveDailyBudget`. Computed once per UTC day from the day's opening `baseline` and `periodEnd`. Cached in `copilot-pacer.adaptiveQuota` as `{ date, quota }`.
+1. Add helper `getAdaptiveDailyBudget`. Cache it as `{ date, quota, periodStartKey, baseline }` and only reuse it when all three state keys still match the current day.
 
 ```typescript
 function getAdaptiveDailyBudget(usage: CopilotUsage): number {
   const todayKey = new Date().toISOString().slice(0, 10);
-  const storedQuota = globalState.get<{ date: string; quota: number }>(
-    "copilot-pacer.adaptiveQuota"
-  );
-  if (storedQuota && storedQuota.date === todayKey) { return storedQuota.quota; }
-
-  const storedBaseline = globalState.get<{ date: string; baseline: number; lastSeen: number }>(
-    "copilot-pacer.dailyBaseline"
-  );
+  const periodStartKey = usage.periodStart.toISOString().slice(0, 10);
+  const storedQuota = globalState.get<AdaptiveQuotaState>("copilot-pacer.adaptiveQuota");
+  const storedBaseline = globalState.get<DailyBaselineState>("copilot-pacer.dailyBaseline");
   const todayStartUsed = storedBaseline?.baseline ?? usage.usedRequests;
-  const remainingRequests = Math.max(0, usage.monthlyLimit - todayStartUsed);
   const remainingDays = daysUntilPeriodEnd(usage.periodEnd);
-  const quota = Math.max(1, remainingRequests / remainingDays);
-
-  globalState.update("copilot-pacer.adaptiveQuota", { date: todayKey, quota });
-  ext.outputChannel.appendLine(
-    `[adaptive quota] remaining=${Math.round(remainingRequests)} / ${remainingDays} days → ${Math.round(quota)}/day`
+  const resolved = resolveAdaptiveDailyBudget(
+    storedQuota,
+    todayKey,
+    periodStartKey,
+    todayStartUsed,
+    usage.monthlyLimit,
+    remainingDays,
   );
-  return quota;
+  if (!resolved.reused) {
+    globalState.update("copilot-pacer.adaptiveQuota", resolved.state);
+  }
+  return resolved.quota;
 }
 ```
 
 1. In `updatePacing`, after fetching `usage`, call both helpers and pass results to `calculatePacing`:
 
 ```typescript
-const todayUsed = getTodayUsed(usage.usedRequests);
+const todayUsed = getTodayUsed(usage);
 const adaptiveDailyBudget = getAdaptiveDailyBudget(usage);
 const result = calculatePacing(usage, todayUsed, adaptiveDailyBudget);
 ```
@@ -223,9 +216,11 @@ Export `outputChannel: vscode.OutputChannel` so `statusBar.ts` can log diagnosti
 
 | Scenario | Expected outcome |
 | ---- | ---- |
-| First VS Code open of the day | `todayUsed = 0` on very first ever run; from the second day onward uses previous `lastSeen` as baseline |
+| First VS Code open of the day | `todayUsed = 0` on very first ever run on a normal day; from the second day onward uses previous `lastSeen` as baseline |
+| First day of a new billing period | `baseline = 0`; daily quota is recomputed from the fresh monthly counter |
 | After N requests in session | Lens fills to `N / dailyBudget` fraction |
 | Over daily budget (`todayUsed > dailyBudget`) | Lens full, future zone fills, tooltip shows "Over daily budget!" |
 | Over monthly limit | Lens shows `$x.xx`, status bar red |
 | Ahead of cumulative pace | Lens still fills based on intra-day usage (Zone 1 eliminated) |
+| Stale same-day quota cache exists | Quota is recomputed if the stored period start or opening baseline no longer matches |
 | No internal API access | Falls back to billing API; `todayUsed` still computed from globalState |

@@ -87,4 +87,17 @@ Tooltip gains a `Today: X / Y` line. Color logic updated: orange = over daily bu
 
 ---
 
+## Small follow-up for 4.0.1
+
+Testing on April 1 exposed one more local-state bug: even with the fresh-month baseline fixed, the cached adaptive quota could still reuse an old same-day value such as `8` because it only keyed off the UTC date.
+
+The follow-up patch makes two local-state checks in `statusBar.ts`:
+
+- on the first day of a new billing period, reset the stored day baseline to `0` so `todayUsed` starts from the new monthly counter
+- only reuse the cached adaptive quota when the date, the billing-period start, and the opening baseline all still match
+
+This keeps `Today: X / Y` correct on the first day of a reset month and ships as version `4.0.1`.
+
+---
+
 Would you be interested in this direction, or do you have a different approach in mind for intraday tracking?
